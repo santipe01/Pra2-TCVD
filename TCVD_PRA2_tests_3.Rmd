@@ -1,0 +1,558 @@
+---
+title: "PRA2_tests"
+author: "Enrique Martí Bandrés y Santiago Pérez Lete"
+date: "2024-05-26"
+output: pdf_document
+---
+
+# Tipologia y ciclo de vida de los datos
+# Práctica 2
+
+## Librerias
+```{r Librerias}
+library(ggplot2)
+library(factoextra)
+library(dplyr)
+library(lmtest)
+```
+
+## 1. Descripción del dataset
+
+### Directorio de trabajo
+```{r Directorio}
+getwd()
+```
+
+### Cargamos el dataset
+Lectura del csv en un dataframe
+```{r 1}
+df_Embalses <- read.csv("embalses.csv")
+```
+
+### Variables del dataset
+Nombre de las columnas que componen el dataset sobre los embalses de España.
+```{r 2}
+colnames(df_Embalses)
+```
+El dataset con el que hemos trabajado contiene información de los embalses de España. Encontramos esta información importante ya que actualmente gran parte de Cataluña está viviendo una de las sequías más severas de las últimas décadas y esta situación llevó a las autoridades catalanas a declarar a comienzos de año la emergencia por sequía en gran parte de los municipios de Catalunya. La falta de lluvias y el bajo nivel de algunos embalses es un tema de crucial importancia del que se habla mucho en medios de comunicación y tertulias.
+Las preguntas que este dataset pretende contestar son: ¿Cuán grave es la sequía que vivimos en Catalunya? ¿Se vive una situación similar en las otras cuencas hidrográficas? ¿Es un problema a nivel de toda España? ¿Cuenta España con suficientes recursos hídricos? ¿Es un problema de falta de lluvia o de falta de infraestructuras de conexión entre cuencas?
+
+Las variables que tiene este dataset son:
+
+| CAMPO                              | TIPO DE DATO | EJEMPLO       |
+|------------------------------------|--------------|---------------|
+| Nombre del embalse                 | caracteres   | La Baells     |
+| Agua embalsada {semana}            | numérico     | 12            |
+| Variación semanal {semana}         | numérico     | 4             |
+| Agua embalsada hace 1 año {semana} | numérico     | 11            |
+| Agua embalsada, media 10 años {semana} | numérico | 110           |
+| Cuenca hidrográfica                | caracteres   | Cataluña Interna |
+| Provincia                          | caracteres   | Barcelona     |
+| Municipio                          | caracteres   | Vilanova Sau  |
+| Nombre del embalse                 | caracteres   | La Baells     |
+| Río                                | caracteres   | TER           |
+| Tipo de presa                      | Gravedad     | Gravedad      |
+| Superfície [Ha]                    | numérico     | 572,8         |
+| Año de construcción (final)        | numérico     | 1963          |
+| Capacidad [Hm³]                    | numérico     | 195           |
+| uso: Abastecimiento                | booleano     | true          |
+| uso: Riego                         | booleano     | true          |
+| uso: Electricidad                  | booleano     | true          |
+| uso: Industrial                    | booleano     | false         |
+| uso: Pesca                         | booleano     | false         |
+| uso: Navegación                    | booleano     | true          |
+| uso: Baño                          | booleano     | true          |
+| uso: Pic-nic                       | booleano     | true          |
+| uso: Restaurantes                  | booleano     | false         |
+| Coordenadas GPS, Longitud          | caracteres*  | 2.384         |
+| Coordenadas GPS, Latitud           | caracteres*  | 41.976        |
+
+
+## 2. Integración y selección
+
+### Exploración de las variables del dataset
+Resumen de las variables.
+```{r 3}
+summary(df_Embalses)
+```
+
+Vectores con los índices de los datos de interés para las diferentes consultas
+```{r 4}
+# identificación de una presa
+iID <- c(1,10,9,8,7)
+colnames(df_Embalses)[iID]
+```
+
+```{r 5}
+# datos para el análisis
+iDA <- c(1,7,4,13,11)
+colnames(df_Embalses)[iDA]
+```
+
+
+
+Los campos que nos interesarán son:
+  
+  Campos alfanuméricos para identificar la presa
+  - Embalse (nombre), como referncia
+  - Municipio, informativo
+  - Río, informativo
+  
+  Campos alfanuméricos, para clasificación y agregación
+  - Cuenca (confederación hidrográfica)
+  - Provincia
+  - Tipo de presa
+  - Año de construcción
+  
+  Variables numéricas
+  - Agua embalsada [hm3] (en la semana de lectura del dato)
+  - Capacidad [hm3]
+  - Superfície [ha]
+  
+  Variables para geolocalización
+  - Longitud
+  - Latitud
+
+
+Nomenclatura abreviada que emplearemos:
+
+n - nombre
+m - municipio
+r - río
+
+H - cuenca hidrográfica
+P - provincia
+T - tipo de presa (4 tipos)
+A - año de construcción
+
+V - volumen de agua embalsada
+
+C - capacidad
+S - superfície
+D - profundidad media (metros)
+F - factor forma
+
+X - longitud
+Y - latitud
+
+
+
+## 3. Limpieza de datos
+
+### Valores perdidos
+
+presas cuyo dato "Capacidad.hm3" es igual a 0
+```{r 6}
+sum(df_Embalses$Capacidad.hm3==0)
+```
+
+presas cuyo dato "Superficie." es igual a 0
+```{r 7}
+sum(df_Embalses$Superficie.=="0.00 ha")
+```
+
+presas que carecen tanto del dato "Capacidad.hm3" como del dato "Superficie."
+```{r 8}
+sum(df_Embalses$Capacidad.hm3==0 & df_Embalses$Superficie.=="0.00 ha")
+```
+
+veamos cuáles son estas presas
+```{r 9}
+head(df_Embalses[df_Embalses$Capacidad.hm3==0 & df_Embalses$Superficie.=="0.00 ha", iID])
+```
+
+hemos consultado varias de estas presas en la web de origen "embalses.net" así como en otra web "iagua.es" y se ha comprobado que se trata de presas pequeñas de las que no se disponen de datos de volumen.
+
+
+filtramos el dataset, eliminando de los registros que carecen tanto de "Capacidad.hm3" como de "Superficie."
+```{r 10}
+df_Embalses_1 <- df_Embalses[ !(df_Embalses$Capacidad.hm3==0 & df_Embalses$Superficie.=="0.00 ha"),]
+```
+
+
+
+presas cuyo dato "Tipo.de.Presa." está vacío
+```{r 11}
+sum(df_Embalses_1$Tipo.de.Presa.=="")
+```
+
+veamos cuáles son:
+```{r 12}
+df_Embalses_1[df_Embalses_1$Tipo.de.Presa.=="", iID]
+```
+
+Dado que son son pocas, hemos buscado información sobre las presas de estos embalses para ver qué hacer con cada una. Nos interesa que en nuestro dataset el dato "tipo de presa" esté completo.
+
+De estas 12 presas, hemos encontrado el tipo de 6 de ellas en la web de la SOCIEDAD ESPAÑOLA DE PRESAS Y EMBALSES, "seprem.es". 
+Imputaremos "manualmente" este dato en estas 6 presas.
+```{r 13}
+df_Embalses_1$Tipo.de.Presa.[rownames(df_Embalses_1)==170] <- "Materiales sueltos núcleo arcilla"
+df_Embalses_1$Tipo.de.Presa.[rownames(df_Embalses_1)==286] <- "Gravedad"
+df_Embalses_1$Tipo.de.Presa.[rownames(df_Embalses_1)==345] <- "Materiales sueltos P asfáltica"
+df_Embalses_1$Tipo.de.Presa.[rownames(df_Embalses_1)==347] <- "Materiales sueltos P hormigón"
+df_Embalses_1$Tipo.de.Presa.[rownames(df_Embalses_1)==520] <- "Gravedad y Materiales sueltos homogenea"
+df_Embalses_1$Tipo.de.Presa.[rownames(df_Embalses_1)==893] <- "Materiales sueltos núcleo arcilla"
+```
+
+
+Las otros 6 embalses que carecían del dato de "Tipo.de.presa." los suprimiremos de nuestro dataset.
+```{r 14}
+df_Embalses_1 <- df_Embalses_1[df_Embalses_1$Tipo.de.Presa. != "", ]
+```
+
+
+# corrección del formato y de la escala
+
+SUPERFÍCIE
+cambio del formato: el dato "supefície" está como texto, con la unidad ha (hectáreas).
+Le quitamos la unidad y lo convertimos a numérico
+```{r 15}
+df_Embalses_1$S <- gsub("\\sha", "", df_Embalses_1$Superficie.)
+df_Embalses_1$S <- gsub(",", "", df_Embalses_1$S)
+df_Embalses_1$S <- as.numeric(df_Embalses_1$S)
+```
+
+
+CORRECCIÓN DE LA CAPACIDAD
+representamos conjuntamente en un gráfico los datos numéricos "capacidad" y "superfície"
+```{r 16}
+plot(df_Embalses_1$S, df_Embalses_1$Capacidad.hm3,
+     main = "dispersión 'superfície-volumen' de los embalses",
+     xlab = "Superfície, Ha",
+     ylab = "Capacidad, Hm³",
+     col = "blue")
+```
+
+Se observan varios puntos con valores de superfície muy elevados pero con valores de capacidad muy pequeños; tal vez se deba a que las unidades no son correctas.
+
+
+Seleccionamos los embalses con superfícies mayores que 4000 y volúmenes inferiores a 50
+```{r 17}
+df_Embalses_1_S4000_v5 <- df_Embalses_1[ (df_Embalses_1$S > 4000 & df_Embalses_1$Capacidad.hm3 < 5) ,]
+```
+
+
+Vemos de qué embalses se trata:
+```{r 18}
+df_Embalses_1_S4000_v5[,iDA]
+```
+
+
+Y trazamos el mismo gráfico superície - capacidad para estos puntos
+```{r 19}
+plot(df_Embalses_1_S4000_v5$S, df_Embalses_1_S4000_v5$Capacidad.hm3,
+     main = "dispersión 'superfície-volumen' de los embalses [S>4000]",
+     xlab = "Superfície, Ha",
+     ylab = "Capacidad, Hm³",
+     col = "blue")
+```
+Se observa que (salvo un dato perdido con capacidad = 0) también mantienen una relación directa superfície-volumen, pero la conversión de unidades no ha sido correcta.
+
+Añadimos el campo capacidad "C" con las unidades corregidas:
+```{r 20}
+df_Embalses_1$C <- ifelse( (df_Embalses_1$S > 4000 & df_Embalses_1$Capacidad.hm3 < 5) , df_Embalses_1$Capacidad.hm3 * 1000 , df_Embalses_1$Capacidad.hm3)
+```
+
+
+Repetimos el mismo gráfico de dispersión:
+```{r 21}
+plot(df_Embalses_1$S, df_Embalses_1$C,
+     main = "dispersión 'superfície-volumen' de los embalses",
+     xlab = "Superfície, Ha",
+     ylab = "Capacidad, Hm³",
+     col = "blue")
+```
+
+
+particularizamos el dataset, dejando sólo aquellos registros que tienen tanto el volumen como la superfície mayores que 0
+```{r 22}
+df_Embalses_2 <- df_Embalses_1[ df_Embalses_1$C>0 & df_Embalses_1$S>0 , ]
+```
+
+
+ahora podemos representar este dataset filtrado en escala logarítmica:
+```{r 23}
+plot(df_Embalses_2$S, df_Embalses_2$C,
+     log = "xy",
+     main = "dispersión 'superfície-volumen' de los embalses",
+     xlab = "Superfície, Ha",
+     ylab = "Capacidad, Hm³",
+     col = "blue")
+```
+
+
+
+TIPO DE EMBALSE, A FACTOR
+
+¿Cuántos tipos de presa hay?
+```{r 24}
+levels(factor(df_Embalses_1$Tipo.de.Presa.))
+```
+
+¿Cuántas presas de cada tipo hay?
+```{r 25}
+table(df_Embalses_1$Tipo.de.Presa.)
+```
+
+
+Función clasificadora para pasar de 21 tipos de presa a sólo 5
+```{r 26}
+supertipo_presas <- function(tipo){
+  
+  switch( sub(" .*","",tipo),
+          "Arco" = "arco",
+          "Bóveda" = "arco",
+          "Contrafuertes" = "contrafuertes",
+          "Gravedad" = "gravedad",
+          "Hormigón" = "gravedad",
+          "Mamposteria" = "gravedad",
+          "Materiales" = "tierras",
+          "Presa" = "gravedad")
+        
+}
+```
+
+
+Añado variable T con el supertipo de presa (tipos agrupado en 4 tipos) y convertido a factor
+```{r 27}
+df_Embalses_1$T <- sapply(df_Embalses_1$Tipo.de.Presa., supertipo_presas)
+df_Embalses_1$T <- factor(df_Embalses_1$T)
+levels(df_Embalses_1$T)
+```
+
+(lo mismo para el df_Embalses_2)
+Añado variable T con el supertipo de presa (tipos agrupado en 4 tipos) y convertido a factor
+```{r 28}
+df_Embalses_2$T <- sapply(df_Embalses_2$Tipo.de.Presa., supertipo_presas)
+df_Embalses_2$T <- factor(df_Embalses_2$T)
+levels(df_Embalses_2$T)
+```
+
+
+Calculo de la variable "Profundidad media" en metros
+```{r 29}
+df_Embalses_2$D <- 100 * df_Embalses_2$C / df_Embalses_2$S
+```
+
+
+Defino la variable adimensional "factor de forma":
+factor de forma = profundidad media / raíz( superfíce )
+Con los valores de 'profunidad media' y 'superfície' expresados en metros.
+Este valor describe la profundidad del embalse en relación a su superfície, lo que da una idea de la forma del volumen de agua.
+Un valor elevado indicará un embalse pequeño en superfície y con mucha profundidad.
+Un valor pequeño será un embalse amplio y con poca profundidad. 
+Calculo factor de forma para el dataset.
+```{r 30}
+df_Embalses_2$F <- df_Embalses_2$D / ( 100 * sqrt(df_Embalses_2$S))
+```
+
+
+Si represento un boxplot de factor de forma, veo que aparece un buen número de valores atípicos, inusualmente elevados. 
+Estos valores tan elevados podrían deberse a algún tipo de error en los datos:
+
+
+Factor de forma típico máximo:
+```{r 31}
+FF_tip.max <- unname( quantile(df_Embalses_2$F)[4]) + 1.5 * IQR( df_Embalses_2$F  )
+FF_tip.max
+```
+
+**
+Embalses con un factor de forma inusualmente elevado y capacidad superior a 1
+Los ordeno por profundidad media en orden descendente:
+```{r 32}
+df_Embalses_2_Fex_C5 <- df_Embalses_2[ df_Embalses_2$F > FF_tip.max & df_Embalses_2$C > 5 , ] 
+df_Embalses_2_Fex_C5 <- df_Embalses_2_Fex_C5[order(df_Embalses_2_Fex_C5$D, decreasing = TRUE),]
+```
+
+
+```{r 33}
+df_Embalses_2_Fex_C5[,c(1,7,27,28,29,30,31)]
+```
+
+Investigando sobre estos embalses hemos visto que:
+- Hay varios embalses pequeños, con una capacidad de 1 Hm3. Dado que este valor está redondeado a Hectómetros (como mínimo vale 1 en todo el dataset), su valor resal es probablemente menor, por lo que incuírlo distorsionaría el resultado. 
+- Los restantes embalses que no son pequeños, hemos detectado algunos cuyo dato de superfície es incorrecto pues no se corresponde con el dato que aparece en otra web alternativa.
+- Pero en otros embalses, hemos corroborado el dato; efectivamente se trata de embalses de gran profundidad.
+
+Para estudiar la relación superfície-profundidad-tipo de presa, lo que haremos es:
+- Prescindiremos de todos los embalses con capacidad igual a 1hm3.
+- Corregiremos los 3 embalses que hemos detectado erróneos.
+
+## 4. Análisis de los datos
+
+Primero, dividimos el dataset en el conjunto de entrenamiento y el conjunto de pruebas. Hacemos esto para poder evaluar mejor nuestros modelos y poder apreciar si hay un sobre ajuste de estos con los datos de entrenamiento. Para ello hemos reservado el 80% para entrenar y el 20% restante para test. 
+
+```{r 34}
+# División train y test
+set.seed(123) # Para reproducibilidad
+sample_indices <- sample(1:nrow(df_Embalses_2), size = 0.8 * nrow(df_Embalses_2))
+train <- df_Embalses_2[sample_indices, ]
+test <- df_Embalses_2[-sample_indices, ]
+
+```
+
+### Modelo Supervisado
+Para el modelo Supervisado, vamos a hacer un modelo de regresión lineal simple para medir la Capacidad en función de la superficie del embalse.
+
+La regresión lineal simple consiste en generar un modelo de regresión (ecuación de una recta) que permita explicar la relación lineal que existe entre dos variables. A la variable dependiente o respuesta se le identifica como Y y a la variable predictora o independiente como X. En este caso la Y será la capacidad y la X la superfície del embalse.
+Por lo tanto, la ecuación que sigue es:
+$Y=\beta0+\beta1X1$
+Siendo $\beta0$ la ordenada en el origen, $\beta1$ la pendiente y X1 el valor de la superfície que queremos predecir.
+
+Para llevar esto a cabo en R, hemos usado la función lm para generar el modelo lineal simple con el conjunto de entrenamiento y, posteriormente, la función predict() para evaluar los resultados con el conjunto de prueba..
+```{r 35}
+# Modelo Supervisado 
+# Regresión para ver la capacidad de un estanque en función de su superfície
+modelo <- lm(C ~ S, data = train)
+
+predicciones <- predict(modelo, test)
+
+# Comparar las predicciones con los valores reales
+resultados <- data.frame(
+  real = test$C,
+  predicho = predicciones
+)
+
+# Calcular métricas de evaluación, por ejemplo, el error cuadrático medio (RMSE)
+rmse <- sqrt(mean((resultados$real - resultados$predicho)^2))
+print(paste("Error cuadrático medio (RMSE):", rmse))
+r_squared <- summary(modelo)$r.squared
+print(paste("R^2:", r_squared))
+
+library(ggplot2)
+
+ggplot(train, aes(x = S, y = C)) +
+  geom_point() +
+  geom_smooth(method = "lm", col = "blue") +
+  labs(title = "Modelo de Regresión Lineal",
+       x = "Superficie",
+       y = "Capacidad")
+
+```
+Los resultados obtenidos son bastante buenos ya que como se puede apreciar en el gráfico los datos siguen una relación lineal y eso provoca que este modelo se adapte muy bien a los datos. Además vemos que el valor del MSE (Error cuadrático medio) es bajo (111), lo que indica que no hay grandes errores en los valores predichos del modelo y por último el R^2 es próximo a 1 (0.88) lo que indica un buen ajuste del modelo.
+
+### Modelo No Supervisado
+
+Para el modelo No Supervisado vamos a hacer un modelo de agrupamiento (o clustering) donde vamos a tratar de ver la relación entre las variables Profundidad Media y la variable Factor Forma para comprobar si estas dos variables determinan el tipo de presa que se construye.
+
+El algoritmo que usaremos para eso es kmeans, que consiste en agrupar los datos de tal manera que los elementos dentro de un mismo grupo sean lo más similares posible entre sí, y lo más diferentes posible de los elementos en otros grupos. 
+
+Este algorimo necesita que se le de de entrada el número de clusters que queremos que encuentre, en este caso como queremos ver la relación que tienen estos grupos con los tipos de presa que hay vamos a poner tantos grupos como tipos de presa hay, que son 4: arco, contrafuertes, gravedad, tierras.  
+
+```{r 36}
+# Modelo No Supervisado 
+# Clustering en función de su superfície y su capacidad para evaluar si tiene relación con el tipo de presa
+# Escalar las variables seleccionadas
+
+# Determinar el número de clusters k
+set.seed(123) # Para reproducibilidad
+k <- 4 # Número de clusters
+
+df_selected <- df_Embalses_2 %>% select(D, F)
+df_scaled <- scale(df_selected)
+
+# Aplicar K-means clustering
+kmeans_result <- kmeans(df_scaled, centers = k)
+
+# Agregar las etiquetas de los clusters al dataframe original
+df_Embalses_2$cluster <- kmeans_result$cluster
+
+# Visualizar los tipos de presa
+ggplot(df_Embalses_2, aes(x = D, y = F, color = factor(T))) +
+  geom_point(size = 4) +
+  labs(title = "K-means Clustering",
+       x = "Profundidad Media",
+       y = "Factor Presa",
+       color = "Tipo de presa")
+
+# Visualizar los clusters
+ggplot(df_Embalses_2, aes(x = D, y = F, color = factor(cluster))) +
+  geom_point(size = 4) +
+  labs(title = "K-means Clustering",
+       x = "Profundidad Media",
+       y = "Factor Presa",
+       color = "Tipo de presa")
+```
+Como podemos ver en los dos gráficos, el primero coloreado por el tipo de presa y el segundo coloreado por los clusters creados por kmeans, hay puntos que sí que los clasifica acorde al tipo de presa pero hay muchos otros que no los clasifica bien. Por lo tanto, no podemos concluir con que estas dos variables tienen mucha relación solamente viendo estos datos.
+### Contraste de Hipótesis
+
+La hipótesis que queremos comprobar es si están los estanques de la cuenca mediterránea significativamente más vacíos que los de la cuenca atlántica y cantábrica?
+$H0:\mu Med = \mu Atl$
+$H1:\mu Med < \mu Atl$
+
+Para ello, lo primero que haremos será separar las diferentes cuencas entre la mediterránea y la atlántica/cantábrica. Y también crearemos una variable que será el porcentaje de agua que hay en un embalse respecto a su capacidad.
+
+```{r 37}
+cuencas_mediterraneas <- c("Cataluña Interna", "Ebro", "Júcar", "Med. Andaluza", "Segura")
+cuencas_atlanticas_cantabricas <- c("Cantabrico Occidental", "Cantabrico Oriental", "Duero", "Galicia Costa", 
+                                    "Guadalete-Barbate", "Guadalquivir", "Guadiana", "Miño-Sil", 
+                                    "Pais Vasco Interna", "Tajo", "Tinto, Odiel y Piedras")
+
+# Dividimos las cuencas entre mediterráneas y atlánticas y cantábricas
+df_Embalses_2 <- df_Embalses_2 %>%
+  mutate(TipoCuenca = case_when(
+    Cuenca. %in% cuencas_mediterraneas ~ "Mediterranea",
+    Cuenca. %in% cuencas_atlanticas_cantabricas ~ "Atlantica/Cantabrica",
+    TRUE ~ "Desconocido" # Para manejar cualquier valor no especificado
+  ))
+
+# Porcentaje de agua que hay en el estanque respecto a su capacidad
+df_Embalses_2 <- df_Embalses_2 %>%
+  mutate(PorcentajeAguaEmbalsada = (Agua.embalsada..08.04.2024..hm3 / C) * 100)
+
+```
+
+Una vez tenemos esto, hecho vamos a ver la normalidad y la homocedasticidad de los datos. Para comprobar la normalidad, realizaremos la prueba de Shapiro-Wilk y para comprobar la homocedasticidad realizaremos la prueba de Breusch-Pagan:
+
+
+
+```{r 38}
+#Comprobación normalidad y la homocedasticidad
+
+modelo <- lm(PorcentajeAguaEmbalsada ~ S, data = df_Embalses_2)
+residuos <- residuals(modelo)
+
+# Prueba de Shapiro-Wilk
+shapiro_test_result <- shapiro.test(residuos)
+print(shapiro_test_result)
+
+# Prueba de Breusch-Pagan
+bptest_result <- bptest(modelo)
+print(bptest_result)
+
+```
+
+En la prueba de Shaphiro-Wilk el valor p es extremadamente pequeño (mucho menor que 0.05), lo que indica que los residuos del modelo no siguen una distribución normal.
+
+En la prueba de Breusch-Pagan el valor p también es muy pequeño (mucho menor que 0.05), lo que indica que los residuos no tienen varianza constante (es decir, no son homocedásticos).
+
+Por último vamos a comprobar si se cumple nuestra hipótesis.
+
+```{r 39}
+# Test de hipotesis
+# Estan los estanques de la cuenca mediterránea significativamente más vacíos que los de la cuenca atlántica y cantábrica?
+
+mediterranea <- df_Embalses_2 %>% filter(TipoCuenca == "Mediterranea") %>% select(PorcentajeAguaEmbalsada)
+atlantica_cantabrica <- df_Embalses_2 %>% filter(TipoCuenca == "Atlantica/Cantabrica") %>% select(PorcentajeAguaEmbalsada)
+
+# Realizar el test t de muestras independientes
+t_test_result <- t.test(mediterranea$PorcentajeAguaEmbalsada, atlantica_cantabrica$PorcentajeAguaEmbalsada, alternative = "less")
+
+# Mostrar el resultado del test t
+print(t_test_result)
+
+
+```
+El resultado del test t indica una diferencia significativa en el porcentaje de agua embalsada entre las cuencas mediterráneas y atlánticas/cantábricas. Dado que el valor p es significativamente bajo y el intervalo de confianza no incluye cero, podemos rechazar la hipótesis nula. Esto significa que hay una diferencia significativa en el porcentaje de agua embalsada entre las cuencas mediterráneas y atlánticas/cantábricas. En este caso, el porcentaje de agua embalsada es significativamente menor en las cuencas mediterráneas en comparación con las atlánticas/cantábricas.
+
+## 6. Resolución del problema
+
+A partir de los resultados obtenidos en los modelos y el contraste de hipótesis, se puede concluir que estos datos pueden responder a cuán grave es la sequía que vivimos en Catalunya y si se vive una situación similar en las otras cuencas hidrográficas, ya que el contraste de hipótesis indica que los embalses de la cuenca mediterránea (donde se encuentra Cataluña) tienen un porcentaje de agua embalsada significativamente menor que los de las cuencas atlánticas y cantábricas. Por lo tanto, la sequía en Cataluña es grave, o al menos es peor que en otras zonas de España. 
+Además, hemos conseguido crear un modelo capaz de predecir la capacidad del embalse sabiendo el valor de la superfície del mismo, esto puede ser de gran ayuda para poder estimar la capacidad de los embalses que no tenían este dato pero sí tenían el valor de la superfície. 
+Finalmente, hemos tratado de ver si la relaciíon entre las variables Profundidad Media y Factor Forma determinan el tipo de presa y los resultados que hemos obtenido no son muy concluyentes ya que algunos valores no se agrupaban como debían. 
+En resumen, estos resultados permiten entender mejor las preguntas planteadas al principio del trabajo relacionadas con la gestión de recursos hídricos en España y sugieren áreas donde se podrían enfocar los esfuerzos para mejorar la disponibilidad y distribución del agua.
+
+El código y los datos de este trabajo estan accesibles en un repositorio GitHub mediante el enlace: https://github.com/santipe01/Pra2-TCVD/tree/main
+
+
